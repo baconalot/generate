@@ -73,9 +73,9 @@ func addTypeAndChildrenToMap(path string, name string, s *Schema, types map[stri
 		namePrefix = ""
 	}
 
-	if len(s.Properties) > 0 || s.Type == "object" {
-		types[path+namePrefix] = s
-	}
+	// if len(s.Properties) > 0 || s.Type == "object" {
+	types[path+namePrefix] = s
+	// }
 
 	if s.Definitions != nil {
 		for k, d := range s.Definitions {

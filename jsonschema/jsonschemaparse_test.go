@@ -1,7 +1,6 @@
 package jsonschema
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -252,8 +251,6 @@ func TestThatArraysAreSupported(t *testing.T) {
 
 	// Check that the types can be extracted into a map.
 	types := so.ExtractTypes()
-
-	fmt.Printf("Types: %+v\n", types)
 
 	if len(types) != 1 {
 		t.Errorf("expected 1 type, just the Product, but got %d types - %s", len(types),

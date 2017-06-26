@@ -33,10 +33,23 @@ func (g *Generator) CreateStructs() (structs map[string]Struct, err error) {
 	errs := []error{}
 
 	for _, typeKey := range getOrderedKeyNamesFromSchemaMap(types) {
+		if strings.Contains(typeKey, "properties/") {
+			continue
+		}
 		v := types[typeKey]
+		var fields map[string]Field
+		var err error
 
-		fields, err := getFields(typeKey, v.Properties, types, v.Required)
-
+		switch v.Type {
+		case "object", "array":
+			fields, err = getFields(typeKey, v.Properties, types, v.Required)
+		case "integer": //type foo struct{int64}
+			fields = map[string]Field{"": Field{Type: "int"}}
+		case "string": //type foo struct{string}
+			fields = map[string]Field{"": Field{Type: "string"}}
+		default:
+			err = fmt.Errorf("Unknown type for output: %v", v.Type)
+		}
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -117,7 +130,7 @@ func getFields(parentTypeKey string, properties map[string]*jsonschema.Schema, t
 	}
 
 	if len(missingTypes) > 0 {
-		return fields, fmt.Errorf("missing types for %s with errors %s", strings.Join(missingTypes, ","), joinErrors(errors))
+		return fields, fmt.Errorf("missing types for '%s' with errors %s\n", strings.Join(missingTypes, ", "), joinErrors(errors))
 	}
 
 	return fields, nil
@@ -169,9 +182,11 @@ func getTypeForField(parentTypeKey string, fieldName string, fieldGoName string,
 	name, err := getPrimitiveTypeName(majorType, subType, pointer)
 
 	if err != nil {
-		return name, fmt.Errorf("Failed to get the type for %s with error %s",
+		return name, fmt.Errorf("Failed to get the type for %v, majorType %v, subType %v, with error %v\n",
 			fieldGoName,
-			err.Error())
+			majorType,
+			subType,
+			err)
 	}
 
 	return name, nil
@@ -202,7 +217,7 @@ func getPrimitiveTypeName(schemaType string, subType string, pointer bool) (name
 		return "string", nil
 	}
 
-	return "undefined", fmt.Errorf("failed to get a primitive type for schemaType %s and subtype %s", schemaType, subType)
+	return "undefined", fmt.Errorf("failed to get a primitive type for schemaType %s and subtype %s\n", schemaType, subType)
 }
 
 // getStructName makes a golang struct name from an input reference in the form of #/definitions/address

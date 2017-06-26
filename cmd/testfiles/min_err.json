@@ -1,0 +1,41 @@
+{
+	"$schema": "http://json-schema.org/draft-04/schema#",
+	"title": "level0",
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"level1s": {
+			"type": "array",
+			"level1key": {
+				"$ref": "#/definitions/level1"
+			}
+		}
+	},
+	"definitions": {
+		"level1": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"level2key": {
+					"$ref": "#/definitions/level2"
+				}
+			}
+		},
+		"level2": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"level3key": {
+					"$ref": "#/definitions/positive_int"
+				},
+				"level2int": {
+					"type": "integer"
+				}
+			}
+		},
+		"positive_int": {
+			"type": "integer",
+			"minimum": 0
+		}
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"io"
 	"io/ioutil"
 	"reflect"
@@ -110,4 +111,10 @@ func TestLineAndCharacterFromOffset(t *testing.T) {
 			t.Errorf("For '%s' at offset %d, expected %d:%d, but got %d:%d", test.In, test.Offset, test.ExpectedLine, test.ExpectedCharacter, actualLine, actualCharacter)
 		}
 	}
+}
+
+func TestMainReally(t *testing.T) {
+	// flag.Set("i", "../testfiles/min_err.json")
+	flag.Set("i", "../testfiles/ortb23req.json")
+	main()
 }

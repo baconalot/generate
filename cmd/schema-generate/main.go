@@ -141,8 +141,12 @@ func output(w io.Writer, structs map[string]generate.Struct) {
 			if f.Required {
 				omitempty = ""
 			}
+			jsontag := ""
+			if f.JSONName != "" {
+				jsontag = fmt.Sprintf("`json:\"%s%s\"`", f.JSONName, omitempty)
+			}
 
-			fmt.Fprintf(w, "  %s %s `json:\"%s%s\"`\n", f.Name, f.Type, f.JSONName, omitempty)
+			fmt.Fprintf(w, "  %v %v %v\n", f.Name, f.Type, jsontag)
 		}
 
 		fmt.Fprintln(w, "}")

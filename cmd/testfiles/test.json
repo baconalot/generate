@@ -49,6 +49,9 @@
           "type": "string",
           "description": "Postcode",
           "maxLength": 8
+        },
+        "status": {
+          "$ref": "#/definitions/status"
         }
       }
     },
