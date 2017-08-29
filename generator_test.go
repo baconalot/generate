@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/a-h/generate/jsonschema"
+	"github.com/baconalot/generate/jsonschema"
 )
 
 func TestThatCapitalisationOccursCorrectly(t *testing.T) {

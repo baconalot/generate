@@ -6,12 +6,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"sort"
 
 	"encoding/json"
 
-	"github.com/a-h/generate"
-	"github.com/a-h/generate/jsonschema"
+	"github.com/baconalot/generate"
+	"github.com/baconalot/generate/jsonschema"
 )
 
 var (
@@ -24,10 +23,21 @@ func main() {
 	flag.Parse()
 
 	b, err := ioutil.ReadFile(*i)
-
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to read the input file with error ", err)
 		return
+	}
+
+	var w io.Writer
+	if *o == "" {
+		w = os.Stdout
+	} else {
+		w, err = os.Create(*o)
+
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error opening output file: ", err)
+			return
+		}
 	}
 
 	schema, err := jsonschema.Parse(string(b))
@@ -55,26 +65,7 @@ func main() {
 
 	g := generate.New(schema)
 
-	structs, err := g.CreateStructs()
-
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failure generating structs: ", err)
-	}
-
-	var w io.Writer
-
-	if *o == "" {
-		w = os.Stdout
-	} else {
-		w, err = os.Create(*o)
-
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error opening output file: ", err)
-			return
-		}
-	}
-
-	output(w, structs)
+	g.Generate(*p, w)
 }
 
 func lineAndCharacter(bytes []byte, offset int) (line int, character int, err error) {
@@ -99,56 +90,4 @@ func lineAndCharacter(bytes []byte, offset int) (line int, character int, err er
 	}
 
 	return 0, 0, fmt.Errorf("Couldn't find offset %d in bytes.", offset)
-}
-
-func getOrderedFieldNames(m map[string]generate.Field) []string {
-	keys := make([]string, len(m))
-	idx := 0
-	for k := range m {
-		keys[idx] = k
-		idx++
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func getOrderedStructNames(m map[string]generate.Struct) []string {
-	keys := make([]string, len(m))
-	idx := 0
-	for k := range m {
-		keys[idx] = k
-		idx++
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func output(w io.Writer, structs map[string]generate.Struct) {
-	//TODO: Use templates.
-	fmt.Fprintf(w, "package %v\n", *p)
-
-	for _, k := range getOrderedStructNames(structs) {
-		s := structs[k]
-
-		fmt.Fprintln(w, "")
-		fmt.Fprintf(w, "type %s struct {\n", s.Name)
-
-		for _, fieldKey := range getOrderedFieldNames(s.Fields) {
-			f := s.Fields[fieldKey]
-
-			// Only apply omitempty if the field is not required.
-			omitempty := ",omitempty"
-			if f.Required {
-				omitempty = ""
-			}
-			jsontag := ""
-			if f.JSONName != "" {
-				jsontag = fmt.Sprintf("`json:\"%s%s\"`", f.JSONName, omitempty)
-			}
-
-			fmt.Fprintf(w, "  %v %v %v\n", f.Name, f.Type, jsontag)
-		}
-
-		fmt.Fprintln(w, "}")
-	}
 }

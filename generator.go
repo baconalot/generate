@@ -8,24 +8,77 @@ import (
 
 	"errors"
 
-	"github.com/a-h/generate/jsonschema"
+	"io"
+
+	"github.com/baconalot/generate/jsonschema"
 )
 
 // Generator will produce structs from the JSON schema.
 type Generator struct {
-	schema *jsonschema.Schema
+	schema               *jsonschema.Schema
+	nonRequiredAsPointer bool
 }
 
 // New creates an instance of a generator which will produce structs.
 func New(schema *jsonschema.Schema) *Generator {
 	return &Generator{
-		schema: schema,
+		schema:               schema,
+		nonRequiredAsPointer: false,
 	}
 }
 
+func (g *Generator) Generate(ppackagee string, w io.Writer) (err error) {
+	types, err := g.CreateStructs()
+	if err != nil {
+		return err
+	}
+
+	//header
+	fmt.Fprintf(w, "package %v\n\n", ppackagee)
+	fmt.Fprintf(w, "import \"encoding/json\"\n\n")
+
+	for _, s := range types {
+		switch s.Type {
+		case GTypeStruct:
+			g.writeStruct(s, w)
+		case GTypeUndefinedStruct:
+			g.writeSingleType(s, "map[string]interface{}", w)
+		case GTypeFloat:
+			g.writeSingleType(s, "json.Number", w)
+		case GTypeInt:
+			g.writeSingleType(s, "int", w)
+		case GTypeString:
+			g.writeSingleType(s, "string", w)
+		}
+	}
+	return nil
+}
+
+func (g *Generator) writeStruct(s GoType, w io.Writer) {
+	fmt.Fprintf(w, "type %s struct {\n", s.Name)
+	for _, f := range s.Fields {
+		// Only apply omitempty if the field is not required.
+		omitempty := ",omitempty"
+		if f.Required {
+			omitempty = ""
+		}
+		jsontag := ""
+		if f.JSONName != "" {
+			jsontag = fmt.Sprintf("`json:\"%s%s\"`", f.JSONName, omitempty)
+		}
+
+		fmt.Fprintf(w, "	%v %v %v\n", f.Name, f.Type, jsontag)
+	}
+	fmt.Fprintf(w, "}\n\n")
+}
+
+func (g *Generator) writeSingleType(s GoType, ty string, w io.Writer) {
+	fmt.Fprintf(w, "type %v %v\n\n", s.Name, ty)
+}
+
 // CreateStructs creates structs from the JSON schema, keyed by the golang name.
-func (g *Generator) CreateStructs() (structs map[string]Struct, err error) {
-	structs = make(map[string]Struct)
+func (g *Generator) CreateStructs() (structs map[string]GoType, err error) {
+	structs = make(map[string]GoType)
 
 	// Extract nested and complex types from the JSON schema.
 	types := g.schema.ExtractTypes()
@@ -33,19 +86,27 @@ func (g *Generator) CreateStructs() (structs map[string]Struct, err error) {
 	errs := []error{}
 
 	for _, typeKey := range getOrderedKeyNamesFromSchemaMap(types) {
-		if strings.Contains(typeKey, "properties/") {
+		v := types[typeKey]
+		if strings.Contains(typeKey, "properties/") && v.Type != "object" { //arg
 			continue
 		}
-		v := types[typeKey]
+
+		var gtyp GType
 		var fields map[string]Field
 		var err error
 
 		switch v.Type {
 		case "object", "array":
-			fields, err = getFields(typeKey, v.Properties, types, v.Required)
+			gtyp = GTypeStruct
+			fields, err = g.getFields(typeKey, v.Properties, types, v.Required)
+			if len(fields) <= 0 {
+				gtyp = GTypeUndefinedStruct
+			}
 		case "integer": //type foo struct{int64}
+			gtyp = GTypeInt
 			fields = map[string]Field{"": Field{Type: "int"}}
 		case "string": //type foo struct{string}
+			gtyp = GTypeString
 			fields = map[string]Field{"": Field{Type: "string"}}
 		default:
 			err = fmt.Errorf("Unknown type for output: %v", v.Type)
@@ -55,15 +116,15 @@ func (g *Generator) CreateStructs() (structs map[string]Struct, err error) {
 		}
 
 		structName := getStructName(typeKey, v, 1)
-
 		if err != nil {
 			errs = append(errs, err)
 		}
 
-		s := Struct{
+		s := GoType{
 			ID:     typeKey,
 			Name:   structName,
 			Fields: fields,
+			Type:   gtyp,
 		}
 
 		structs[s.Name] = s
@@ -101,7 +162,7 @@ func getOrderedKeyNamesFromSchemaMap(m map[string]*jsonschema.Schema) []string {
 	return keys
 }
 
-func getFields(parentTypeKey string, properties map[string]*jsonschema.Schema, types map[string]*jsonschema.Schema, requiredFields []string) (field map[string]Field, err error) {
+func (g *Generator) getFields(parentTypeKey string, properties map[string]*jsonschema.Schema, types map[string]*jsonschema.Schema, requiredFields []string) (field map[string]Field, err error) {
 	fields := map[string]Field{}
 
 	missingTypes := []string{}
@@ -109,9 +170,10 @@ func getFields(parentTypeKey string, properties map[string]*jsonschema.Schema, t
 
 	for _, fieldName := range getOrderedKeyNamesFromSchemaMap(properties) {
 		v := properties[fieldName]
+		required := contains(requiredFields, fieldName)
 
 		golangName := getGolangName(fieldName)
-		tn, err := getTypeForField(parentTypeKey, fieldName, golangName, v, types, true)
+		tn, err := getTypeForField(parentTypeKey, fieldName, golangName, v, types, !required && g.nonRequiredAsPointer)
 
 		if err != nil {
 			missingTypes = append(missingTypes, golangName)
@@ -123,7 +185,7 @@ func getFields(parentTypeKey string, properties map[string]*jsonschema.Schema, t
 			JSONName: fieldName,
 			// Look up the types, try references first, then drop to the built-in types.
 			Type:     tn,
-			Required: contains(requiredFields, fieldName),
+			Required: required,
 		}
 
 		fields[f.Name] = f
@@ -204,7 +266,7 @@ func getPrimitiveTypeName(schemaType string, subType string, pointer bool) (name
 	case "integer":
 		return "int", nil
 	case "number":
-		return "float64", nil
+		return "json.Number", nil
 	case "null":
 		return "nil", nil
 	case "object":
@@ -305,13 +367,25 @@ func capitaliseFirstLetter(s string) string {
 	return strings.ToUpper(prefix) + suffix
 }
 
+type GType int
+
+const (
+	GTypeNOTSET GType = iota
+	GTypeStruct
+	GTypeUndefinedStruct
+	GTypeInt
+	GTypeString
+	GTypeFloat
+)
+
 // Struct defines the data required to generate a struct in Go.
-type Struct struct {
+type GoType struct {
 	// The ID within the JSON schema, e.g. #/definitions/address
 	ID string
 	// The golang name, e.g. "Address"
 	Name   string
 	Fields map[string]Field
+	Type   GType
 }
 
 // Field defines the data required to generate a field in Go.

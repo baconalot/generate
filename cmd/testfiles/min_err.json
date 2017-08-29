@@ -30,6 +30,21 @@
 				},
 				"level2int": {
 					"type": "integer"
+				},
+				"level2float": {
+					"type": "number"
+				},
+				"level2bool": {
+					"type": "boolean"
+				},
+				"level2nil": {
+					"type": "null"
+				},
+				"level2str": {
+					"type": "string"
+				},
+				"level2obj": {
+					"type": "object"
 				}
 			}
 		},
